@@ -1,6 +1,6 @@
 /*
  * FEATURE 3: Sessions and roles
- * Owner: To be claimed
+ * Owner: Luke
  *
  * WHAT TO CREATE:
  * - A way to track the current logged-in user and their role.
