@@ -47,9 +47,9 @@ mvn compile
 | 28 | 378 Insecure Temp File | Lennart | `files/ExportService.createOwnerOnlyTempFile` |
 | 29 | 459 Incomplete Cleanup | Lennart | `files/ExportService.export` (finally) |
 | 30 | 552 Externally Accessible Files | Lennart | `files/ExportService`, `config/AppConfig.exportsDir` |
-| 31 | 820 Missing Synchronization | — | `assign/TicketLockManager` |
-| 32 | 821 Incorrect Synchronization | — | `assign/TicketLockManager`, version column in `TicketRepository` |
-| 33 | 367 TOCTOU | — | `ticket/TicketRepository.assignIfUnassigned`, `assign/AssignmentService.claim` |
-| 34 | 833 Deadlock | — | `assign/TicketLockManager.withLocks` |
-| 35 | 117 Log Injection | — | `audit/LogSanitizer` |
-| 36 | 778 Insufficient Logging | — | `audit/AuditLog` (+ calls from every service) |
+| 31 | 820 Missing Synchronization | McKenna | `assign/TicketLockManager` |
+| 32 | 821 Incorrect Synchronization | McKenna | `assign/TicketLockManager`, version column in `TicketRepository` |
+| 33 | 367 TOCTOU | McKenna | `ticket/TicketRepository.assignIfUnassigned`, `assign/AssignmentService.claim` |
+| 34 | 833 Deadlock | McKenna | `assign/TicketLockManager.withLocks` |
+| 35 | 117 Log Injection | McKenna | `audit/LogSanitizer` |
+| 36 | 778 Insufficient Logging | McKenna | `audit/AuditLog` (+ calls from every service) |
