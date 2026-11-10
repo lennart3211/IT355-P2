@@ -1,5 +1,13 @@
 package com.ticketapp.user;
 
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.util.Objects;
+
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+
+import com.ticketapp.config.AppConfig;
 import com.ticketapp.model.User;
 
 /**
@@ -21,7 +29,24 @@ public class PasswordHasher {
 
     public HashResult hash(char[] password) {
         // TODO: new salt via SecureRandom; SecretKeyFactory.getInstance(ALGORITHM); PBEKeySpec; clearPassword()
-        throw new UnsupportedOperationException("TODO");
+        Objects.requireNonNull(password, "password");
+
+        SecureRandom random = new SecureRandom();
+        byte[] salt = new byte[SALT_BYTES];
+        random.nextBytes(salt);
+
+        int iterations = AppConfig.PBKDF2_ITERATIONS;
+        PBEKeySpec spec = new PBEKeySpec(password, salt, iterations, KEY_BITS);
+
+        try {
+            SecretKeyFactory skf = SecretKeyFactory.getInstance(ALGORITHM);
+            byte[] hash = skf.generateSecret(spec).getEncoded();
+            return new HashResult(hash, salt, iterations);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Couldn't hash password", e);
+        } finally {
+            spec.clearPassword();
+        }
     }
 
     public boolean verify(char[] password, User user) {
