@@ -50,13 +50,35 @@ public class PasswordHasher {
     }
 
     public boolean verify(char[] password, User user) {
-        // TODO: re-derive using user's salt+iterations; MessageDigest.isEqual(derived, user.getPasswordHash())
-        throw new UnsupportedOperationException("TODO");
+        Objects.requireNonNull(password, "password");
+        Objects.requireNonNull(user, "user");
+
+        byte[] storedHash = user.getPasswordHash();
+        byte[] salt = user.getSalt();
+        int iterations = user.getIterations();
+
+        if (storedHash == null || storedHash.length != KEY_BITS / Byte.SIZE
+                || salt == null || salt.length == 0 || iterations <= 0) {
+            return false;
+        }
+
+        PBEKeySpec spec = new PBEKeySpec(password, salt, iterations, KEY_BITS);
+        try {
+            SecretKeyFactory skf = SecretKeyFactory.getInstance(ALGORITHM);
+            byte[] derivedHash = skf.generateSecret(spec).getEncoded();
+            return java.security.MessageDigest.isEqual(derivedHash, storedHash);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Couldn't verify password", e);
+        } finally {
+            spec.clearPassword();
+        }
     }
 
     /** Burn the same CPU as verify() so unknown usernames aren't faster (CWE-208). */
     public void dummyVerify(char[] password) {
-        // TODO: derive against a fixed dummy salt, discard result
+        Objects.requireNonNull(password, "password");
+        // TODO: Coordinate implementation with Kimlay for CWE-208.
         throw new UnsupportedOperationException("TODO");
+    }
     }
 }
