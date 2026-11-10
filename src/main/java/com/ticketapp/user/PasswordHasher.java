@@ -80,5 +80,4 @@ public class PasswordHasher {
         // TODO: Coordinate implementation with Kimlay for CWE-208.
         throw new UnsupportedOperationException("TODO");
     }
-    }
 }
