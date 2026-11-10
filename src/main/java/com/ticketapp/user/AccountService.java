@@ -1,3 +1,4 @@
+
 package com.ticketapp.user;
 
 import com.ticketapp.audit.AuditLog;
@@ -7,7 +8,7 @@ import com.ticketapp.session.AccessControl;
 import com.ticketapp.session.Session;
 
 /**
- * Registration, password change, role change.  Owner: Caleb (roles: Luke)
+ * Registration, password change, role change. Owner: Caleb (roles: Luke)
  *
  * CWE-521: PasswordPolicy on register and change.
  * CWE-620 Unverified Password Change: changePassword requires the OLD password.
@@ -26,8 +27,9 @@ public class AccountService {
     private final AccessControl access;
     private final AuditLog audit;
 
-    public AccountService(UserRepository users, PasswordHasher hasher, PasswordPolicy policy,
-                          AccessControl access, AuditLog audit) {
+    public AccountService(UserRepository users, PasswordHasher hasher,
+                          PasswordPolicy policy, AccessControl access,
+                          AuditLog audit) {
         this.users = users;
         this.hasher = hasher;
         this.policy = policy;
@@ -35,22 +37,98 @@ public class AccountService {
         this.audit = audit;
     }
 
-    public User register(String username, char[] password, String email, String phone) {
-        // TODO: validate username format; policy.validate(); hasher.hash();
-        //       user.setRole(Role.DEFAULT)  <-- never from input (CWE-842)
-        throw new UnsupportedOperationException("TODO");
+    public User register(String username, char[] password,
+                         String email, String phone) {
+
+        if (username == null || !username.matches("[A-Za-z0-9._-]{3,32}")) {
+            if (password != null) {
+                java.util.Arrays.fill(password, '\0');
+            }
+
+            throw new IllegalArgumentException(
+                    "Username must be 3-32 characters using letters, numbers, '.', '_' or '-'");
+        }
+
+        if (password == null) {
+            throw new IllegalArgumentException("Password is required");
+        }
+
+        try {
+            if (users.findByUsername(username).isPresent()) {
+                throw new IllegalArgumentException("Username is unavailable");
+            }
+
+            java.util.List<String> problems =
+                    policy.validate(password, username);
+
+            if (!problems.isEmpty()) {
+                throw new IllegalArgumentException(
+                        String.join("; ", problems));
+            }
+
+            PasswordHasher.HashResult result = hasher.hash(password);
+
+            User user = new User();
+            user.setUsername(username);
+            user.setPasswordHash(result.hash());
+            user.setSalt(result.salt());
+            user.setIterations(result.iterations());
+            user.setEmail(email);
+            user.setPhone(phone);
+
+            // Never accept a role from registration input.
+            // Every new account starts least-privileged.
+            user.setRole(Role.DEFAULT);
+
+            user.setMustChangePassword(false);
+
+            return users.insert(user);
+
+        } finally {
+            java.util.Arrays.fill(password, '\0');
+        }
     }
 
-    public void changePassword(Session session, char[] oldPassword, char[] newPassword) {
+    public void changePassword(Session session, char[] oldPassword,
+                               char[] newPassword) {
         // TODO: access.requireValid(session); verify oldPassword (CWE-620);
         //       policy.validate(newPassword); hash; save with mustChange=false; audit PASSWORD_CHANGED
         throw new UnsupportedOperationException("TODO");
     }
 
-    public void changeRole(Session session, long targetUserId, Role newRole) {
-        // TODO: access.requireRole(session, Role.ADMIN)  (CWE-749 / CWE-306)
-        //       users.updateRole(); audit ROLE_CHANGED with old -> new
-        throw new UnsupportedOperationException("TODO");
+    public void changeRole(Session session, long targetUserId,
+                           Role newRole) {
+
+        Session actor = access.requireRole(session, Role.ADMIN);
+
+        if (newRole == null) {
+            throw new IllegalArgumentException("A valid role is required");
+        }
+
+        User target = users.findById(targetUserId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("User not found"));
+
+        Role oldRole = target.getRole();
+
+        if (oldRole == newRole) {
+            return;
+        }
+
+        // Revoke old role snapshots before persisting the new role.
+        // If persistence fails, the user is merely required to log in again;
+        // stale privileges are never retained.
+        access.invalidateAllForUser(targetUserId);
+
+        users.updateRole(targetUserId, newRole);
+
+        audit.record(
+                AuditLog.Event.ROLE_CHANGED,
+                actor.username(),
+                "User " + targetUserId
+                        + " role changed from " + oldRole
+                        + " to " + newRole
+        );
     }
 
     /**
