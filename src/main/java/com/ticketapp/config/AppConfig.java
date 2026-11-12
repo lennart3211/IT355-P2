@@ -11,13 +11,13 @@ import java.util.Base64;
 import java.util.Map;
 
 /**
- * All runtime configuration, loaded once at startup.
+ * Runtime configuration loaded at startup.
  *
- * CWE-798 Hard-coded Credentials (Caleb):
- * DB password and encryption key come from environment variables.
+ * CWE-798 (Caleb):
+ * Credentials and encryption keys come from environment variables.
  *
- * CWE-455 Non-exit on Failed Initialization (Kimlay):
- * Reject missing or invalid security configuration.
+ * CWE-455 (Kimlay):
+ * Reject invalid configuration and stop initialization.
  */
 public final class AppConfig {
 
@@ -28,11 +28,14 @@ public final class AppConfig {
     public static final String ENV_FIELD_KEY = "TICKETAPP_FIELD_KEY";
     public static final String ENV_DATA_DIR = "TICKETAPP_DATA_DIR";
 
-    // Security configuration constants
+    // Security limits
     public static final int MAX_FAILED_LOGINS = 5;
-    public static final Duration LOCKOUT_BASE = Duration.ofMinutes(1);
-    public static final Duration LOCKOUT_MAX = Duration.ofMinutes(15);
-    public static final Duration SESSION_IDLE_TIMEOUT = Duration.ofMinutes(15);
+    public static final Duration LOCKOUT_BASE =
+            Duration.ofMinutes(1);
+    public static final Duration LOCKOUT_MAX =
+            Duration.ofMinutes(15);
+    public static final Duration SESSION_IDLE_TIMEOUT =
+            Duration.ofMinutes(15);
     public static final int PBKDF2_ITERATIONS = 600_000;
     public static final int MAX_DESCRIPTION_LENGTH = 4_000;
     public static final int MAX_OPEN_TICKETS_PER_USER = 20;
@@ -43,28 +46,32 @@ public final class AppConfig {
     private final byte[] fieldKey;
     private final Path dataDir;
 
-    private AppConfig(String dbUrl, String dbUser,
-                      char[] dbPassword, byte[] fieldKey,
-                      Path dataDir) {
+    private AppConfig(
+            String dbUrl,
+            String dbUser,
+            char[] dbPassword,
+            byte[] fieldKey,
+            Path dataDir) {
+
         this.dbUrl = dbUrl;
         this.dbUser = dbUser;
-        this.dbPassword = dbPassword;
-        this.fieldKey = fieldKey;
+        this.dbPassword = dbPassword.clone();
+        this.fieldKey = fieldKey.clone();
         this.dataDir = dataDir;
     }
 
     /**
-     * CWE-455: Load configuration at startup.
-     * Stop initialization if required settings are invalid.
+     * Load configuration from operating system environment.
      */
     public static AppConfig load()
             throws SecurityConfigException {
+
         return load(System.getenv());
     }
 
     /**
-     * Load and validate configuration values.
-     * The Map parameter also allows unit testing.
+     * Validate all required settings before initialization.
+     * Map parameter allows unit testing.
      */
     public static AppConfig load(Map<String, String> env)
             throws SecurityConfigException {
@@ -74,14 +81,14 @@ public final class AppConfig {
                     "Configuration environment is missing");
         }
 
-        // Validate required environment variables
+        // CWE-798: No hard-coded credentials.
         String dbUrl = require(env, ENV_DB_URL);
         String dbUser = require(env, ENV_DB_USER);
         String dbPassword = require(env, ENV_DB_PASSWORD);
         String encodedKey = require(env, ENV_FIELD_KEY);
         String directory = require(env, ENV_DATA_DIR);
 
-        // Validate AES-256 encryption key
+        // CWE-455: Reject invalid encryption keys.
         byte[] fieldKey;
 
         try {
@@ -93,10 +100,10 @@ public final class AppConfig {
 
         if (fieldKey.length != 32) {
             throw new SecurityConfigException(
-                    "Encryption key must be 32 bytes");
+                    "Encryption key must be 32 bytes for AES-256");
         }
 
-        // Validate the data directory path
+        // Validate data directory.
         Path dataDir;
 
         try {
@@ -105,22 +112,22 @@ public final class AppConfig {
                     .normalize();
         } catch (RuntimeException e) {
             throw new SecurityConfigException(
-                    "Invalid data directory", e);
+                    "Invalid data directory path", e);
         }
 
-        // Initialize secure directories
+        // Create secure directories.
         try {
             createSecureDirectory(dataDir);
             createSecureDirectory(
                     dataDir.resolve("attachments"));
             createSecureDirectory(
                     dataDir.resolve("exports"));
+
         } catch (IOException | SecurityException e) {
             throw new SecurityConfigException(
                     "Failed to initialize secure directories", e);
         }
 
-        // Initialization succeeded
         return new AppConfig(
                 dbUrl,
                 dbUser,
@@ -131,24 +138,25 @@ public final class AppConfig {
     }
 
     /**
-     * Reject missing or blank configuration values.
+     * Require a nonblank configuration value.
      */
     private static String require(
             Map<String, String> env,
-            String name) throws SecurityConfigException {
+            String name)
+            throws SecurityConfigException {
 
         String value = env.get(name);
 
         if (value == null || value.isBlank()) {
             throw new SecurityConfigException(
-                    "Missing required configuration: " + name);
+                    "Missing required environment variable: " + name);
         }
 
         return value;
     }
 
     /**
-     * Create directories with owner-only permissions.
+     * Create directories and restrict access.
      */
     private static void createSecureDirectory(Path dir)
             throws IOException {
@@ -160,7 +168,7 @@ public final class AppConfig {
                     "Data path is not a directory");
         }
 
-        // Apply POSIX permissions on macOS/Linux
+        // Owner-only access on POSIX systems.
         if (FileSystems.getDefault()
                 .supportedFileAttributeViews()
                 .contains("posix")) {
@@ -172,7 +180,8 @@ public final class AppConfig {
         }
     }
 
-    // Configuration getters
+    // Getters
+
     public String dbUrl() {
         return dbUrl;
     }
