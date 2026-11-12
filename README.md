@@ -1,4 +1,4 @@
-# IT Ticket CLI App — skeleton
+# IT Ticket CLI App
 
 Java 17 / Maven. Every method that still needs work throws `UnsupportedOperationException("TODO")`
 and has a `// TODO` describing what to do. Each class's Javadoc lists the CWEs it covers.
