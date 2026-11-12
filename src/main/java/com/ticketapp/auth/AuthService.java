@@ -1,27 +1,27 @@
+
 package com.ticketapp.auth;
 
 import com.ticketapp.audit.AuditLog;
+import com.ticketapp.model.User;
 import com.ticketapp.session.Session;
 import com.ticketapp.session.SessionManager;
 import com.ticketapp.user.PasswordHasher;
 import com.ticketapp.user.UserRepository;
 
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Login / logout.  Owner: Kimlay
- *
- * CWE-204 Observable Response Discrepancy: every failure returns the SAME
- *   message, GENERIC_FAILURE, whether the user is missing, locked, or the
- *   password is wrong.
- * CWE-208 Observable Timing Discrepancy: for unknown usernames, still run a
- *   full PBKDF2 hash against DUMMY salt; compare with MessageDigest.isEqual().
- * CWE-307 / CWE-645: delegates throttling to LoginThrottle.
- * CWE-778: logs LOGIN_SUCCESS / LOGIN_FAILURE / ACCOUNT_LOCKED.
+ * Owner: Kimlay
+ * CWE-204: Generic authentication failure responses.
+ * CWE-208: Similar password verification work.
+ * CWE-307 / CWE-645: Login throttling.
  */
 public class AuthService {
 
-    public static final String GENERIC_FAILURE = "Invalid username or password";
+    public static final String GENERIC_FAILURE =
+            "Invalid username or password";
 
     private final UserRepository users;
     private final PasswordHasher hasher;
@@ -29,32 +29,109 @@ public class AuthService {
     private final SessionManager sessions;
     private final AuditLog audit;
 
-    public AuthService(UserRepository users, PasswordHasher hasher, LoginThrottle throttle,
-                       SessionManager sessions, AuditLog audit) {
-        this.users = users;
-        this.hasher = hasher;
-        this.throttle = throttle;
-        this.sessions = sessions;
-        this.audit = audit;
+    public AuthService(
+            UserRepository users,
+            PasswordHasher hasher,
+            LoginThrottle throttle,
+            SessionManager sessions,
+            AuditLog audit) {
+
+        this.users = Objects.requireNonNull(users);
+        this.hasher = Objects.requireNonNull(hasher);
+        this.throttle = Objects.requireNonNull(throttle);
+        this.sessions = Objects.requireNonNull(sessions);
+        this.audit = Objects.requireNonNull(audit);
     }
 
-    /**
-     * @return a session on success; empty on ANY failure (caller prints GENERIC_FAILURE).
-     */
-    public Optional<Session> login(String username, char[] password) {
-        // TODO:
-        //  1. look up user (may be absent)
-        //  2. if absent -> hasher.dummyVerify(password) for equal timing (CWE-208), return empty
-        //  3. if throttle.isLocked(user) -> still do dummy work, return empty (CWE-204: same message)
-        //  4. hasher.verify(password, user) -> uses MessageDigest.isEqual
-        //  5. on failure: throttle.recordFailure(user); audit LOGIN_FAILURE (+ ACCOUNT_LOCKED if it locked)
-        //  6. on success: throttle.reset(user); sessions.create(user); audit LOGIN_SUCCESS
-        //  7. always zero out the password array in finally
-        throw new UnsupportedOperationException("TODO");
+    public Optional<Session> login(
+            String username, char[] password) {
+
+                if (password == null) {
+                    password = new char[0];
+                }
+
+        try {
+            Optional<User> found = username == null
+                    ? Optional.empty()
+                    : users.findByUsername(username);
+
+            // Unknown username.
+            if (found.isEmpty()) {
+                hasher.dummyVerify(password);
+
+                audit.record(
+                    AuditLog.Event.LOGIN_FAILURE,
+                    username == null ? "anonymous" : username,
+                    "Login rejected");
+
+                return Optional.empty();
+            }
+
+            User user = found.get();
+
+            // Account is temporarily locked.
+            if (throttle.isLocked(user)) {
+                hasher.dummyVerify(password);
+
+                audit.record(
+                        AuditLog.Event.LOGIN_FAILURE,
+                        user.getUsername(),
+                        "Login rejected");
+
+                return Optional.empty();
+            }
+
+            // Incorrect password.
+            if (!hasher.verify(password, user)) {
+
+                boolean locked =
+                        throttle.recordFailure(user);
+
+                users.updateLockState(user);
+
+                audit.record(
+                        AuditLog.Event.LOGIN_FAILURE,
+                        user.getUsername(),
+                        "Login rejected");
+
+                if (locked) {
+                    audit.record(
+                            AuditLog.Event.ACCOUNT_LOCKED,
+                            user.getUsername(),
+                            "Temporary lockout");
+                }
+
+                return Optional.empty();
+            }
+
+            // Successful authentication.
+            throttle.reset(user);
+            users.updateLockState(user);
+
+            Session session = sessions.create(user);
+
+            audit.record(
+                    AuditLog.Event.LOGIN_SUCCESS,
+                    user.getUsername(),
+                    "Login succeeded");
+
+            return Optional.of(session);
+
+        } finally {
+            Arrays.fill(password, '\0');
+        }
     }
 
     public void logout(Session session) {
-        // TODO: sessions.invalidate(session.token()) (CWE-1465); audit LOGOUT
-        throw new UnsupportedOperationException("TODO");
+        if (session == null) {
+            return;
+        }
+
+        sessions.invalidate(session.token());
+
+        audit.record(
+                AuditLog.Event.LOGOUT,
+                session.username(),
+                "Logout");
     }
 }

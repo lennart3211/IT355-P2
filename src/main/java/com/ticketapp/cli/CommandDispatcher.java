@@ -1,7 +1,8 @@
 package com.ticketapp.cli;
 
 import com.ticketapp.config.AppConfig;
-
+import com.ticketapp.session.AccessControl;
+import com.ticketapp.session.Session;
 import java.io.InputStream;
 import java.io.PrintStream;
 
@@ -28,6 +29,39 @@ import java.io.PrintStream;
 public class CommandDispatcher {
 
     // TODO: fields for each service + current Session
+    // CWE-306: Authentication protection
+    private AccessControl access;
+    private Session currentSession;
+
+/**
+ * CWE-306: Require authentication before protected commands.
+ *
+ * Public commands can run without a session.
+ * All other commands require a valid login session.
+ */
+private void requireAuthentication(String command) {
+
+    if (command == null || command.isBlank()) {
+        throw new IllegalArgumentException("Command is required");
+    }
+
+    switch (command) {
+        case "login", "register", "help", "quit" -> {
+            // Public commands do not require authentication.
+            return;
+        }
+
+        default -> {
+            // Reject unauthenticated or expired sessions.
+            if (access == null) {
+                throw new IllegalStateException(
+                        "Authentication service is not initialized");
+            }
+
+            currentSession = access.requireValid(currentSession);
+        }
+    }
+}
 
     public static CommandDispatcher wire(AppConfig config) {
         // TODO: construct Database, repositories, services; db.initSchema();
