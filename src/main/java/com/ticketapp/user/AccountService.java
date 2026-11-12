@@ -163,8 +163,42 @@ public class AccountService {
     /**
      * Creates the initial admin on first run. The initial password comes from an env var
      * or is randomly generated and printed ONCE; mustChangePassword = true (CWE-1392, CWE-798).
+     * The initial password comes from TICKETAPP_ADMIN_PASSWORD env var; if missing, startup fails.
      */
     public void seedAdminIfMissing() {
-        throw new UnsupportedOperationException("TODO");
+        String username = "admin";
+        var existing = users.findByUsername(username);
+
+        if (existing.isPresent()) {
+            if (existing.get().getRole() != Role.ADMIN) {
+                throw new IllegalStateException("Reserved admin username is already in use");
+            }
+            return;
+        }
+
+        String configured = System.getenv("TICKETAPP_ADMIN_PASSWORD");
+        if (configured == null || configured.isBlank()) {
+            throw new IllegalStateException("Set TICKETAPP_ADMIN_PASSWORD for first startup");
+        }
+
+        char[] password = configured.toCharArray();
+        try {
+            var problems = policy.validate(password, username);
+            if (!problems.isEmpty()) {
+                throw new IllegalArgumentException(String.join("; ", problems));
+            }
+
+            var result = hasher.hash(password);
+            User admin = new User();
+            admin.setUsername(username);
+            admin.setPasswordHash(result.hash());
+            admin.setSalt(result.salt());
+            admin.setIterations(result.iterations());
+            admin.setRole(Role.ADMIN);
+            admin.setMustChangePassword(true);
+            users.insert(admin);
+        } finally {
+            java.util.Arrays.fill(password, '\0');
+        }
     }
 }
