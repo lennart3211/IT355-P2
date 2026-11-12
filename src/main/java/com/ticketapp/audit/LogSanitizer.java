@@ -10,9 +10,22 @@ public final class LogSanitizer {
     private LogSanitizer() { }
 
     public static String clean(String input) {
-        if (input == null) return "";
-        // TODO: replace \r, \n and other ISO control chars with '_' (or escape as \\n)
-        // TODO: optionally truncate to a max length
-        throw new UnsupportedOperationException("TODO");
+    if (input == null) {
+        return "";
     }
+
+    StringBuilder result = new StringBuilder();
+
+    for (char c : input.toCharArray()) {
+        if (Character.isISOControl(c) || c == '|') {
+            result.append('_');
+        } else {
+            result.append(c);
+        }
+    }
+
+    return result.length() > 500
+            ? result.substring(0, 500)
+            : result.toString();
+}
 }

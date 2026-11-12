@@ -1,5 +1,14 @@
 package com.ticketapp.audit;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Instant;
+
+
 /**
  * Security audit log.
  *
@@ -10,6 +19,7 @@ package com.ticketapp.audit;
  * Never log passwords, hashes, session tokens, or contact details.
  */
 public class AuditLog {
+    private static final Path LOG_FILE = Path.of("audit.log");
 
     public enum Event {
         LOGIN_SUCCESS,
@@ -31,11 +41,32 @@ public class AuditLog {
      * @param actor   username performing the action (or "anonymous")
      * @param detail  free text; WILL be sanitized
      */
-    public void record(Event event, String actor, String detail) {
+    public synchronized void record(Event event, String actor, String detail) {
         String safeActor = LogSanitizer.clean(actor);
         String safeDetail = LogSanitizer.clean(detail);
-        // TODO: write timestamp | event | safeActor | safeDetail to audit_log table or file
-        //       (use PreparedStatement if DB; append-only file with owner-only perms if file)
-        throw new UnsupportedOperationException("TODO");
+
+        String entry = Instant.now() + " | " + event + " | "
+                + safeActor + " | " + safeDetail + System.lineSeparator();
+
+        try {
+            Files.writeString(
+                    LOG_FILE,
+                    entry,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.APPEND
+            );
+
+            if (Files.getFileStore(LOG_FILE)
+                    .supportsFileAttributeView("posix")) {
+                Files.setPosixFilePermissions(
+                        LOG_FILE,
+                        PosixFilePermissions.fromString("rw-------")
+                );
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to write audit log", e);
+        }
     }
 }
+
