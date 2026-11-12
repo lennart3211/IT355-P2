@@ -89,13 +89,42 @@ public class AccountService {
         }
     }
 
-    public void changePassword(Session session, char[] oldPassword,
-                               char[] newPassword) {
-        // TODO: access.requireValid(session); verify oldPassword (CWE-620);
-        //       policy.validate(newPassword); hash; save with mustChange=false; audit PASSWORD_CHANGED
-        throw new UnsupportedOperationException("TODO");
-    }
+    public void changePassword(Session session, char[] oldPassword, char[] newPassword) {
+        try {
+            Session validSession = access.requireValid(session);
+            User user = users.findById(validSession.userId())
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
+            if (oldPassword == null || !hasher.verify(oldPassword, user)) {
+                throw new IllegalArgumentException("Current password is incorrect");
+            }
+
+            var problems = policy.validate(newPassword, user.getUsername());
+            if (!problems.isEmpty()) {
+                throw new IllegalArgumentException(String.join("; ", problems));
+            }
+
+            if (java.util.Arrays.equals(oldPassword, newPassword)) {
+                throw new IllegalArgumentException("Choose a different password");
+            }
+
+            var result = hasher.hash(newPassword);
+            users.updatePassword(user.getId(), result.hash(), result.salt(),
+                    result.iterations(), false);
+
+            access.invalidateAllForUser(user.getId());
+            audit.record(AuditLog.Event.PASSWORD_CHANGED,
+                    user.getUsername(), "Password changed");
+        } finally {
+            if (oldPassword != null) {
+                java.util.Arrays.fill(oldPassword, '\0');
+            }
+            if (newPassword != null) {
+                java.util.Arrays.fill(newPassword, '\0');
+            }
+        }
+    }
+    
     public void changeRole(Session session, long targetUserId,
                            Role newRole) {
 
