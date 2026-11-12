@@ -50,7 +50,20 @@ public final class AppConfig {
         // TODO: read each ENV_* via System.getenv(); throw if null/blank
         // TODO: decode ENV_FIELD_KEY (e.g. Base64) and verify it is 32 bytes for AES-256
         // TODO: verify dataDir exists; create attachments/ and exports/ with owner-only perms
-        throw new UnsupportedOperationException("TODO");
+        for (String env : new String[]{ENV_DB_URL, ENV_DB_USER, ENV_DB_PASSWORD, ENV_FIELD_KEY, ENV_DATA_DIR}) {
+            String value = System.getenv(env);
+            if (value == null || value.isBlank()) {
+                throw new SecurityConfigException("Missing required environment variable: " + env);
+            }
+        }
+
+        return new AppConfig(
+                System.getenv(ENV_DB_URL),
+                System.getenv(ENV_DB_USER),
+                System.getenv(ENV_DB_PASSWORD).toCharArray(),
+                java.util.Base64.getDecoder().decode(System.getenv(ENV_FIELD_KEY)),
+                Path.of(System.getenv(ENV_DATA_DIR))
+        );
     }
 
     public String dbUrl() { return dbUrl; }
