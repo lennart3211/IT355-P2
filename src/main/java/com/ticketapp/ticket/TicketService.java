@@ -1,11 +1,11 @@
 package com.ticketapp.ticket;
-
+import com.ticketapp.config.AppConfig;
 import com.ticketapp.audit.AuditLog;
 import com.ticketapp.model.Role;
 import com.ticketapp.model.Ticket;
 import com.ticketapp.session.AccessControl;
 import com.ticketapp.session.Session;
-
+import java.util.Locale;
 import java.util.List;
 
 /**
@@ -22,38 +22,138 @@ import java.util.List;
  */
 public class TicketService {
 
+    private static final int MAX_TITLE_LENGTH = 200;
+    private static final int MAX_SEARCH_LENGTH = 100;
+
     private final TicketRepository repo;
     private final AccessControl access;
     private final AuditLog audit;
 
-    public TicketService(TicketRepository repo, AccessControl access, AuditLog audit) {
+    public TicketService(
+            TicketRepository repo,
+            AccessControl access,
+            AuditLog audit) {
         this.repo = repo;
         this.access = access;
         this.audit = audit;
     }
 
-    public TicketView create(Session session, String title, String description, String contactInfo) {
-        // TODO: requireValid; validate lengths; countOpenByOwner < cap; insert; audit TICKET_CREATED
-        throw new UnsupportedOperationException("TODO");
+    // CWE-770: Enforce limits on ticket creation.
+    public TicketView create(
+            Session session,
+            String title,
+            String description,
+            String contactInfo) {
+
+        Session valid = access.requireValid(session);
+
+        if (title == null || title.isBlank()
+                || title.length() > MAX_TITLE_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Title must be between 1 and 200 characters");
+        }
+
+        if (description == null
+                || description.length() > AppConfig.MAX_DESCRIPTION_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Description exceeds the allowed length");
+        }
+
+        int openTickets = repo.countOpenByOwner(valid.userId());
+
+        if (openTickets >= AppConfig.MAX_OPEN_TICKETS_PER_USER) {
+            throw new IllegalStateException(
+                    "Maximum number of open tickets reached");
+        }
+
+        Ticket ticket = new Ticket();
+        ticket.setOwnerId(valid.userId());
+        ticket.setTitle(title);
+        ticket.setDescription(description);
+        ticket.setContactInfo(contactInfo);
+        ticket.setStatus(Ticket.Status.OPEN);
+
+        Ticket saved = repo.insert(ticket);
+
+        audit.record(
+                AuditLog.Event.TICKET_CREATED,
+                valid.username(),
+                "Ticket created: " + saved.getId()
+        );
+
+        return TicketView.forViewer(saved, valid);
     }
 
+    // CWE-639: Verify ownership or technician role.
     public TicketView view(Session session, long ticketId) {
-        // TODO: findById; access.requireCanView (CWE-639); return TicketView.forViewer(...)
-        throw new UnsupportedOperationException("TODO");
+        Session valid = access.requireValid(session);
+
+        Ticket ticket = repo.findById(ticketId).orElse(null);
+
+        access.requireCanView(valid, ticket);
+
+        return TicketView.forViewer(ticket, valid);
     }
 
+    // CWE-359: Return only authorized ticket views.
     public List<TicketView> list(Session session) {
-        // TODO: USER -> own tickets only; TECHNICIAN+ -> all; map through TicketView (CWE-359)
-        throw new UnsupportedOperationException("TODO");
+        Session valid = access.requireValid(session);
+
+        List<Ticket> tickets;
+
+        if (valid.role().atLeast(Role.TECHNICIAN)) {
+            tickets = repo.findAll();
+        } else {
+            tickets = repo.findByOwner(valid.userId());
+        }
+
+        return tickets.stream()
+                .map(ticket -> TicketView.forViewer(ticket, valid))
+                .toList();
     }
 
+    // CWE-1333: Literal search instead of user-controlled regex.
     public List<TicketView> search(Session session, String keyword) {
-        // TODO: cap keyword length; plain contains(), no Pattern.compile(userInput) (CWE-1333)
-        throw new UnsupportedOperationException("TODO");
+        Session valid = access.requireValid(session);
+
+        if (keyword == null || keyword.isBlank()
+                || keyword.length() > MAX_SEARCH_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Search keyword must be between 1 and 100 characters");
+        }
+
+        String normalized = keyword.toLowerCase(Locale.ROOT);
+
+        List<Ticket> tickets;
+
+        if (valid.role().atLeast(Role.TECHNICIAN)) {
+            tickets = repo.findAll();
+        } else {
+            tickets = repo.findByOwner(valid.userId());
+        }
+
+        return tickets.stream()
+                .filter(ticket ->
+                        ticket.getTitle() != null
+                        && ticket.getTitle()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(normalized))
+                .map(ticket -> TicketView.forViewer(ticket, valid))
+                .toList();
     }
 
+    // CWE-306 / CWE-749: Admin-only deletion.
     public void delete(Session session, long ticketId) {
-        // TODO: access.requireRole(session, Role.ADMIN) (CWE-306/749); repo.delete; audit TICKET_DELETED
-        throw new UnsupportedOperationException("TODO");
+        Session valid = access.requireRole(session, Role.ADMIN);
+
+        boolean deleted = repo.delete(ticketId);
+
+        if (deleted) {
+            audit.record(
+                    AuditLog.Event.TICKET_DELETED,
+                    valid.username(),
+                    "Ticket deleted: " + ticketId
+            );
+        }
     }
 }
