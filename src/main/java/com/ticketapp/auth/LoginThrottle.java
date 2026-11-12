@@ -1,53 +1,83 @@
+
 package com.ticketapp.auth;
 
+import com.ticketapp.config.AppConfig;
 import com.ticketapp.model.User;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Owner: Kimlay
- *
- * CWE-307 Excessive Authentication Attempts: lock after MAX_FAILED_LOGINS (5).
- * CWE-645 Overly Restrictive Lockout: the lock is TEMPORARY and BOUNDED
- *   (exponential backoff capped at LOCKOUT_MAX), and an admin can unlock.
- *   An attacker must not be able to lock a real user out forever.
- *
- * Clock is injected so tests can fast-forward time.
+ * CWE-307: Limit failed login attempts.
+ * CWE-645: Temporary and bounded account lockouts.
  */
 public class LoginThrottle {
 
     private final Clock clock;
 
     public LoginThrottle(Clock clock) {
-        this.clock = clock;
+        this.clock = Objects.requireNonNull(clock);
     }
 
     public boolean isLocked(User user) {
-        // TODO: lockedUntil != null && now < lockedUntil
-        throw new UnsupportedOperationException("TODO");
+        Instant until = user.getLockedUntil();
+        return until != null && clock.instant().isBefore(until);
     }
 
-    /** @return true if this failure caused a new lockout. */
+    // Returns true when a new lockout occurs.
     public boolean recordFailure(User user) {
-        // TODO: increment failedLogins; if >= MAX_FAILED_LOGINS, set lockedUntil = now + nextLockDuration
-        //       and increment lockoutCount; persist via UserRepository
-        throw new UnsupportedOperationException("TODO");
+
+        // Failed attempts during lockout do not extend it.
+        if (isLocked(user)) {
+            return false;
+        }
+
+        int failures = user.getFailedLogins() + 1;
+
+        if (failures < AppConfig.MAX_FAILED_LOGINS) {
+            user.setFailedLogins(failures);
+            return false;
+        }
+
+        Duration duration =
+                nextLockDuration(user.getLockoutCount());
+
+        user.setLockedUntil(clock.instant().plus(duration));
+        user.setLockoutCount(user.getLockoutCount() + 1);
+        user.setFailedLogins(0);
+
+        return true;
     }
 
+    // Reset after successful login.
     public void reset(User user) {
-        // TODO: failedLogins = 0, lockedUntil = null (consider decaying lockoutCount over time)
-        throw new UnsupportedOperationException("TODO");
+        user.setFailedLogins(0);
+        user.setLockedUntil(null);
+        user.setLockoutCount(0);
     }
 
-    /** Recovery path (CWE-645): admin-initiated unlock. Caller must check ADMIN role. */
+    // Caller must verify ADMIN authorization first.
     public void adminUnlock(User user) {
-        // TODO
-        throw new UnsupportedOperationException("TODO");
+        reset(user);
     }
 
-    Duration nextLockDuration(int lockoutCount) {
-        // TODO: LOCKOUT_BASE * 2^lockoutCount, capped at LOCKOUT_MAX
-        throw new UnsupportedOperationException("TODO");
+    // 1, 2, 4, 8, 15 minutes maximum.
+    Duration nextLockDuration(int count) {
+
+        if (count >= 20) {
+            return AppConfig.LOCKOUT_MAX;
+        }
+
+        long factor = 1L << Math.max(0, count);
+
+        Duration duration =
+                AppConfig.LOCKOUT_BASE.multipliedBy(factor);
+
+        return duration.compareTo(AppConfig.LOCKOUT_MAX) > 0
+                ? AppConfig.LOCKOUT_MAX
+                : duration;
     }
 }
