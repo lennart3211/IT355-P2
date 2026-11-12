@@ -1,5 +1,8 @@
 package com.ticketapp.user;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Owner: Caleb
  * CWE-521 Weak Password Requirements: enforced at registration AND password change.
@@ -28,4 +31,39 @@ public class PasswordPolicy {
                 + (digit ? 1 : 0) + (symbol ? 1 : 0);
         return types >= 3;
     }
+
+/**
+ * CWE-521: Validate password requirements.
+ * Returns a list of problems, or an empty list if valid.
+ */
+public List<String> validate(char[] password, String username) {
+    List<String> problems = new ArrayList<>();
+
+    if (password == null) {
+        problems.add("Password is required");
+        return problems;
+    }
+
+    if (password.length < MIN_LENGTH) {
+        problems.add("Password must be at least 12 characters");
+    }
+
+    if (password.length > MAX_LENGTH) {
+        problems.add("Password must be at most 128 characters");
+    }
+
+    if (!hasRequiredCharacterTypes(password)) {
+        problems.add("Password must contain at least 3 character types");
+    }
+
+    if (username != null && !username.isBlank()) {
+        String passwordText = new String(password).toLowerCase();
+        if (passwordText.contains(username.toLowerCase())) {
+            problems.add("Password must not contain username");
+        }
+    }
+
+    return problems;
+}
+
 }
