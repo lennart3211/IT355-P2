@@ -1,4 +1,3 @@
-
 package com.ticketapp.db;
 
 import java.sql.Connection;
@@ -55,8 +54,8 @@ public class Database {
                     salt VARBINARY(128) NOT NULL,
                     iterations INT NOT NULL,
                     role_name VARCHAR(50) NOT NULL,
-                    email_encrypted VARCHAR(2048),
-                    phone_encrypted VARCHAR(2048),
+                    email_enc VARCHAR(2048),
+                    phone_enc VARCHAR(2048),
                     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
                     failed_logins INT NOT NULL DEFAULT 0,
                     locked_until BIGINT,
@@ -89,7 +88,7 @@ public class Database {
                     description VARCHAR(4000),
                     contact_enc VARCHAR(2048),
                     status VARCHAR(30) NOT NULL DEFAULT 'OPEN',
-                    created_at TIMESTAMP NOT NULL ,
+                    created_at TIMESTAMP NOT NULL,
                     version BIGINT NOT NULL DEFAULT 0,
                     CONSTRAINT fk_ticket_owner
                         FOREIGN KEY (owner_id)

@@ -118,7 +118,7 @@ public class UserRepositoryTest {
 
         try (Connection conn = db.connect();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT email_encrypted FROM users WHERE username = ?")) {
+                "SELECT email_enc FROM users WHERE username = ?")) {
             ps.setString(1, "frank");
             try (ResultSet rs = ps.executeQuery()) {
                 assertTrue(rs.next());
