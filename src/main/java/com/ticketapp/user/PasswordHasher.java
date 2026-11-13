@@ -77,7 +77,18 @@ public class PasswordHasher {
     /** Burn the same CPU as verify() so unknown usernames aren't faster (CWE-208). */
     public void dummyVerify(char[] password) {
         Objects.requireNonNull(password, "password");
-        // TODO: Coordinate implementation with Kimlay for CWE-208.
-        throw new UnsupportedOperationException("TODO");
+        byte[] dummySalt = new byte[SALT_BYTES];
+        byte[] dummyHash = new byte[KEY_BITS / Byte.SIZE];
+        PBEKeySpec spec = new PBEKeySpec(
+                password, dummySalt, AppConfig.PBKDF2_ITERATIONS, KEY_BITS);
+        try {
+            SecretKeyFactory skf = SecretKeyFactory.getInstance(ALGORITHM);
+            byte[] derivedHash = skf.generateSecret(spec).getEncoded();
+            java.security.MessageDigest.isEqual(derivedHash, dummyHash);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Couldn't verify password", e);
+        } finally {
+            spec.clearPassword();
+        }
     }
 }
