@@ -1,5 +1,20 @@
 package com.ticketapp.cli;
 
+import java.io.Console;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Scanner;
+
 import com.ticketapp.audit.AuditLog;
 import com.ticketapp.auth.AuthService;
 import com.ticketapp.auth.LoginThrottle;
@@ -23,21 +38,6 @@ import com.ticketapp.user.AccountService;
 import com.ticketapp.user.PasswordHasher;
 import com.ticketapp.user.PasswordPolicy;
 import com.ticketapp.user.UserRepository;
-
-import java.io.Console;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.PrintStream;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Scanner;
 
 /**
  * Owner: Kimlay
@@ -585,6 +585,14 @@ public class CommandDispatcher {
         }
 
         try {
+            User user = services.users().findById(currentSession.userId())
+            .orElseThrow(() -> new AccessDeniedException("Access denied"));
+
+            if (user.isMustChangePassword() && !choice.equals("5")) {
+                out.println("Change your password before using protected commands.");
+                return true;
+            }
+            
             switch (choice) {
                 case "1" -> createTicket(scanner, out);
                 case "2" -> viewTicket(scanner, out);
