@@ -25,7 +25,6 @@ public class AuditLog {
         LOGIN_SUCCESS,
         LOGIN_FAILURE,
         ACCOUNT_LOCKED,
-        ACCOUNT_UNLOCKED,
         LOGOUT,
         PASSWORD_CHANGED,
         ROLE_CHANGED,

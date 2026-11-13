@@ -485,8 +485,8 @@ public class CommandDispatcher {
         // CWE-645: admins can always lift a lockout.
         services.throttle().adminUnlock(target);
         services.users().updateLockState(target);
-        services.audit().record(AuditLog.Event.ACCOUNT_UNLOCKED,
-                admin.username(), "Unlocked account " + username);
+        services.audit().record(AuditLog.Event.ACCOUNT_LOCKED,
+            admin.username(), "Lockout cleared for " + username);
         out.println(username + " has been unlocked.");
     }
 
