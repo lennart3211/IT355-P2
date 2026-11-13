@@ -24,7 +24,12 @@ public class PasswordHasher {
     public static final String ALGORITHM = "PBKDF2WithHmacSHA256";
     public static final int SALT_BYTES = 16;
     public static final int KEY_BITS = 256;
-
+    // Fixed random salt/hash used only by dummyVerify() (CWE-208).
+    private static final byte[] DUMMY_SALT = new byte[SALT_BYTES];
+    private static final byte[] DUMMY_HASH = new byte[KEY_BITS / Byte.SIZE];
+    static {
+        new SecureRandom().nextBytes(DUMMY_SALT);
+    }
     public record HashResult(byte[] hash, byte[] salt, int iterations) { }
 
     public HashResult hash(char[] password) {
@@ -77,7 +82,18 @@ public class PasswordHasher {
     /** Burn the same CPU as verify() so unknown usernames aren't faster (CWE-208). */
     public void dummyVerify(char[] password) {
         Objects.requireNonNull(password, "password");
-        // TODO: Coordinate implementation with Kimlay for CWE-208.
-        throw new UnsupportedOperationException("TODO");
+
+        PBEKeySpec spec = new PBEKeySpec(
+                password, DUMMY_SALT, AppConfig.PBKDF2_ITERATIONS, KEY_BITS);
+        try {
+            SecretKeyFactory skf = SecretKeyFactory.getInstance(ALGORITHM);
+            byte[] derived = skf.generateSecret(spec).getEncoded();
+            // Same constant-time comparison as verify(); result is ignored.
+            java.security.MessageDigest.isEqual(derived, DUMMY_HASH);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Couldn't verify password", e);
+        } finally {
+            spec.clearPassword();
+        }
     }
 }
