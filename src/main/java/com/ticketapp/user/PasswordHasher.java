@@ -28,7 +28,6 @@ public class PasswordHasher {
     public record HashResult(byte[] hash, byte[] salt, int iterations) { }
 
     public HashResult hash(char[] password) {
-        // TODO: new salt via SecureRandom; SecretKeyFactory.getInstance(ALGORITHM); PBEKeySpec; clearPassword()
         Objects.requireNonNull(password, "password");
 
         SecureRandom random = new SecureRandom();

@@ -47,9 +47,6 @@ public final class AppConfig {
 
     /** Loads and validates config from the environment. Throws on anything missing/invalid. */
     public static AppConfig load() throws SecurityConfigException {
-        // TODO: read each ENV_* via System.getenv(); throw if null/blank
-        // TODO: decode ENV_FIELD_KEY (e.g. Base64) and verify it is 32 bytes for AES-256
-        // TODO: verify dataDir exists; create attachments/ and exports/ with owner-only perms
         for (String env : new String[]{ENV_DB_URL, ENV_DB_USER, ENV_DB_PASSWORD, ENV_FIELD_KEY, ENV_DATA_DIR}) {
             String value = System.getenv(env);
             if (value == null || value.isBlank()) {

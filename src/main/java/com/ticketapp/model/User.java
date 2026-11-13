@@ -23,8 +23,6 @@ public class User {
     private java.time.Instant lockedUntil;     // CWE-307/645
     private int lockoutCount;                  // CWE-645 bounded backoff
 
-    // TODO: constructors, getters/setters as needed
-    // Do NOT add toString() that prints passwordHash, salt, email or phone.
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
